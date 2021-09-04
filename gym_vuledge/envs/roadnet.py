@@ -7,10 +7,10 @@ import pandas as pd
 from sklearn.preprocessing import LabelBinarizer
 
 class GV:
-    SIM_TIME = 500 + 1
+    SIM_TIME = 2000 + 1
     GEN_RATE = 10
     GEN_END = (SIM_TIME - 1) * GEN_RATE * 0.9
-    ATK_RATE = 100
+    ATK_RATE = 300
 
     MOVE_INTV = 0.5
     
@@ -19,7 +19,7 @@ class GV:
     ROUTE_GRP_NUM = 2
 
     VEHICLE_LENGTH = 4.5
-    WARMING_UP = 100
+    WARMING_UP = 500
 
     BETA_1 = 1
     BETA_2 = 3
