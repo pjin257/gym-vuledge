@@ -304,7 +304,7 @@ class Moving_Process(object):
                         else:
                             stuck = True
 
-            print("Simulation time: {0}".format(self.env.now))
+            #print("Simulation time: {0}".format(self.env.now))
             
     def vehicle_entry(self, edge, vehicle):
         # Add vehicle to the queue of selected edge
