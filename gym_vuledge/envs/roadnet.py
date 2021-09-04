@@ -95,7 +95,7 @@ class Traffic_Gen(object):
 
                 except Exception as error:
                     # Errors above and there are some pairs that have no path between src/dst
-                    print(error)
+                    #print(error)
                     pass
             
     def vehicle_entry(self, edge, vehicle):
@@ -533,7 +533,8 @@ class Edge_Attack(object):
                                             vehicle.path = new_route
                                     
                                 except Exception as error:
-                                    print('[Re-routing]', error)
+                                    #print('[Re-routing]', error)
+                                    pass
 
 class ROADNET(object):
     def __init__(self, num_cand):
