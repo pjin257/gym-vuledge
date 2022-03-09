@@ -3,23 +3,22 @@ import networkx as nx
 import numpy as np
 import random
 import simpy
+import pickle
 import pandas as pd
-from sklearn.preprocessing import LabelBinarizer
+import pkg_resources
 
 class GV:
-    SIM_TIME = 2000 + 1
-    GEN_RATE = 10
-    GEN_END = (SIM_TIME - 1) * GEN_RATE * 0.9
-    ATK_RATE = 300
+    SIM_TIME = 3500 + 1
+    GEN_RATE = 1.5
+    GEN_END = 2000 * GEN_RATE
+    ATK_RATE = 200
 
-    MOVE_INTV = 0.5
+    MOVE_INTV = 1
     
     REROUTE = None
-    REROUTE_INTV = [60, 60]
-    ROUTE_GRP_NUM = 2
 
     VEHICLE_LENGTH = 4.5
-    WARMING_UP = 500
+    WARMING_UP = 1000
 
     BETA_1 = 1
     BETA_2 = 3
@@ -40,16 +39,93 @@ class Traffic_Gen(object):
         self.gen_rate = GV.GEN_RATE
         self.vehicle_number = 0
         self.G = G
-        self.nodes = list(self.G.nodes)
-        self.route_groups = list(range(0, GV.ROUTE_GRP_NUM))
-
         self.Q_dic = {}   # Dictionary of traffic queue for each edge in the network 
         self.delay_dic = {}   # Dictionary of practical delay log on each edge
         
         for edge in self.G.edges:
             self.Q_dic[edge] = []
             self.delay_dic[edge] = []
+        
+        # traffic demand group
+        
+        # UCD is selected as dst. at 50% prob.
+        self.ucd = [
+            2607436562,   # Southwest
+            1910520967,   # South
+            1910521041,   # Southeast
+            2599137941, # North
+            2607436619 # West
+        ]
+        
+        # groceries are selected as dst. at 10% prob.
+        self.groceries = [
+            599394518, #Safeway (N) 
+            95710949, #Safeway (S)
+            3076147004, #Savemart
+            95714491, #TJ
+            2580278625, #Nugget (N)
+            599381072, #Nugget (S)
+            95714168, #Target
+        ]
 
+        # downtown area is selected as dst. at 10% prob.
+        self.downtown = [
+            95711354,
+            95711358,
+            95711361,
+            95713482,
+            271743555,
+            498524153,
+            498524168
+        ]
+
+        # I-80W (eastbound) is selected as org. at 15% prob.
+        self.i80w = [
+            267383938
+        ]
+
+        # I-80E (westbound) is selected as org. at 10% prob.
+        self.i80e = [
+            62224641
+        ]
+        
+        self.nodes = list(self.G.nodes)
+        
+        # compute org. node sampling weight
+        nx.set_node_attributes(self.G, 1, 'org_w')
+        general_org_num = len(self.nodes) - len(self.i80w) - len(self.i80e)
+        
+        # Other nodes are sampled at 75% of probability
+        i80w_prob = general_org_num * 15 / 75
+        i80e_prob = general_org_num * 10 / 75
+
+        for node in self.G.nodes():
+            if node in self.i80w:
+                self.G.nodes[node]['org_w'] = i80w_prob / len(self.i80w)
+            elif node in self.i80e:
+                self.G.nodes[node]['org_w'] = i80e_prob / len(self.i80e)
+                
+        self.org_weights = [self.G.nodes[node]['org_w'] for node in self.nodes]
+        
+        # compute dst. node sampling weight
+        nx.set_node_attributes(self.G, 1, 'dst_w')
+        general_dst_num = len(self.nodes) - len(self.ucd) - len(self.groceries) - len(self.downtown)
+
+        # Other nodes are sampled at 30% of probability
+        ucd_prob = general_dst_num * 5 / 3      # 50% from UCD
+        downtown_prob = general_dst_num / 3     # 10% from downtown area
+        groceries_prob = general_dst_num / 3    # 10% from groceries
+
+        for node in self.G.nodes():
+            if node in self.ucd:
+                self.G.nodes[node]['dst_w'] = ucd_prob / len(self.ucd)
+            elif node in self.downtown:
+                self.G.nodes[node]['dst_w'] = downtown_prob / len(self.downtown)
+            elif node in self.groceries:
+                self.G.nodes[node]['dst_w'] = groceries_prob / len(self.groceries)
+        
+        self.dst_weights = [self.G.nodes[node]['dst_w'] for node in self.nodes]
+        
         self.action = env.process(self.run())
         
     def run(self):       
@@ -59,32 +135,22 @@ class Traffic_Gen(object):
                            
             if self.vehicle_number >= GV.GEN_END : continue
             
-            # Create and enqueue new vehicle
-            gen_time = self.env.now  
-            
+            # Create and enqueue a new vehicle            
             generated = False
-            gen_trial = 0
             
             while not generated:
                 try :
                     # Generate a vehicle with random src/dst pair
-                    src = random.choice(self.nodes)
-                    dst = random.choice(self.nodes)
+                    src = random.choices(self.nodes, weights=self.org_weights, k=1)[0]
+                    dst = random.choices(self.nodes, weights=self.dst_weights, k=1)[0]
                     
                     if src == dst:
                         raise ValueError('src and dst node are the same')
-
-                    cost = nx.shortest_path_length(self.G, src, dst, weight='expected_delay')
-                    if cost == float('inf'):
-                        raise ValueError('The only path for the OD pair is attacked')    
                         
                     path = nx.shortest_path(self.G, src, dst, weight='expected_delay')
                     start_edge = (path[0], path[1], 0)
-                    if self.G.edges[start_edge]['saturation'] > 1:
-                        raise ValueError('The start edge is fully saturated')
 
-                    grp = random.choice(self.route_groups)
-                    new_vehicle = Vehicle(self.vehicle_number, self.env.now, src, dst, path, grp)
+                    new_vehicle = Vehicle(self.vehicle_number, self.env.now, src, dst, path)
 
                     # Put the vehicle in the starting edge
                     self.vehicle_entry(start_edge, new_vehicle)
@@ -129,14 +195,17 @@ class Traffic_Gen(object):
         cp1 = GV.CP_1
         cp2 = GV.CP_2
 
-        if edge_type == 'primary' or edge_type == 'primary_link':
-            if edge_len > 15 : signal_delay = 10
+        if edge_type == 'primary':
+            signal_delay = 10
 
-        elif edge_type == 'secondary' or edge_type == 'secondary_link':
-            if edge_len > 15 : signal_delay = 10
+        elif edge_type == 'secondary':
+            signal_delay = 10
 
-        elif edge_type == 'tertiary' or edge_type == 'tertiary_link':
-            if edge_len > 15 : signal_delay = 6
+        elif edge_type == 'tertiary':
+            signal_delay = 6
+                
+        elif edge_type == 'residential':
+            signal_delay = 4
 
         # Get penalty rate    
 
@@ -185,13 +254,12 @@ class Traffic_Gen(object):
             
 # Vehicle instance
 class Vehicle:
-    def __init__(self, identifier, gen_time, src, dst, path, route_group):
+    def __init__(self, identifier, gen_time, src, dst, path):
         # Basic stats
         self.identifier = identifier
         self.gen_time = gen_time
         self.src = src
         self.dst = dst
-        self.grp = route_group
         
         # dynamic stats
         self.path = path
@@ -211,43 +279,8 @@ class Moving_Process(object):
         self.finished = []
         self.G = G   
         self.tg = traffic_generator
-
-        # Refine the number of lanes of each edge
-        double_lane = ['East Covell Boulevard', 'West Covell Boulevard',
-                      'Covell Boulevard', 'Russell Boulevard',
-                      'East Covell Boulevard;West Covell Boulevard']
-        triple_lane = []
-        lane_dic = {}
-
-        for edge in self.G.edges:
-            # Get the number of lane
-            edge_data = self.G.get_edge_data(edge[0], edge[1], edge[2])
-            num_lane = edge_data.get('lanes')
-
-            if isinstance(num_lane, list):
-                num_lane = int(max(num_lane))
-            elif isinstance(num_lane, str):
-                num_lane = int(num_lane)
-            elif num_lane == None: 
-                num_lane = 1
-
-
-            # Find the edges that have designated number of lanes
-            road_name = edge_data.get('name')
-            if isinstance(road_name, list):
-                road_name = road_name[0]
-
-            tem_lane_num = 0
-            if road_name in double_lane :
-                tem_lane_num = 2
-            elif road_name in triple_lane :
-                tem_lane_num = 3
-            else : tem_lane_num = 1
-
-            final_num = max(num_lane, tem_lane_num)
-            lane_dic[edge] = final_num
-
-        nx.set_edge_attributes(self.G, lane_dic, 'lanes')
+        
+        self.v_num = [0]
 
         self.action = env.process(self.run())
 
@@ -303,8 +336,21 @@ class Moving_Process(object):
                                 stuck = True
                         else:
                             stuck = True
-
-            #print("Simulation time: {0}".format(self.env.now))
+                            
+            epsilon = 0.01
+            
+            log_time = self.env.now % 20
+            print_time = self.env.now % 100
+            
+            if log_time < epsilon or abs(log_time) > 20 - epsilon: 
+                # Log the number of vehicles in the network in every 20 seconds
+                vn = 0
+                for queue in self.tg.Q_dic.values():
+                    vn += len(queue)
+                
+                self.v_num.append(vn)
+                
+            if print_time < epsilon or abs(print_time) > 100 - epsilon: print("Simulation time: {0}".format(self.env.now))
             
     def vehicle_entry(self, edge, vehicle):
         # Add vehicle to the queue of selected edge
@@ -359,14 +405,17 @@ class Moving_Process(object):
         cp1 = GV.CP_1
         cp2 = GV.CP_2
 
-        if edge_type == 'primary' or edge_type == 'primary_link':
-            if edge_len > 15 : signal_delay = 10
+        if edge_type == 'primary':
+            signal_delay = 10
 
-        elif edge_type == 'secondary' or edge_type == 'secondary_link':
-            if edge_len > 15 : signal_delay = 10
+        elif edge_type == 'secondary':
+            signal_delay = 10
 
-        elif edge_type == 'tertiary' or edge_type == 'tertiary_link':
-            if edge_len > 15 : signal_delay = 6
+        elif edge_type == 'tertiary':
+            signal_delay = 6
+                
+        elif edge_type == 'residential':
+            signal_delay = 4
 
         # Get penalty rate    
 
@@ -415,12 +464,11 @@ class Moving_Process(object):
 
 # Rerouting process
 class Reroute_Process(object): 
-    def __init__(self, env, G, traffic_generator, route_group, intv):
+    def __init__(self, env, G, traffic_generator):
         self.env = env
-        self.interval = intv
+        self.interval = GV.REROUTE_INTV
         self.G = G   
         self.tg = traffic_generator
-        self.grp = route_group
         self.action = env.process(self.run())
 
     def run(self):
@@ -428,9 +476,8 @@ class Reroute_Process(object):
             yield self.env.timeout(self.interval)
 
             for edge in self.G.edges:
-              q = self.tg.Q_dic[edge]
-              for vehicle in q:
-                if vehicle.grp == self.grp:
+                q = self.tg.Q_dic[edge]
+                for vehicle in q:
                     # the index of the node that this vehicle is moving toward on this edge
                     next_node_idx = vehicle.e_idx + 1
 
@@ -452,10 +499,11 @@ class Edge_Attack(object):
         self.hist = {}
         self.tg = traffic_generator
         self.atk_cnt = 0
+        self.max_cnt = 5
 
-        # manage candidates and select
-        self.cand = {}
-        self.disrupt_order = None
+        # interprete action to target edge
+        self.target = None
+        self.edges = list(self.G.edges(keys=True))
         self.last_atk_time = None
 
         # Term edge count after idx-th attack
@@ -466,215 +514,111 @@ class Edge_Attack(object):
     def run(self):       
         yield self.env.timeout(GV.WARMING_UP) # defer attack to the end of warming-up period
         while True:                        
-            # Select an edge to disrupt that chosen by the agent
-            for key in self.cand:
-                if self.cand[key] == self.disrupt_order:
-                    vul_edge = key
-            
-            # Change expected time cost to infinity
-            self.G.edges[vul_edge]['expected_delay'] = float('inf')
-            self.G.edges[vul_edge]['alive'] = False
-            
-            # Log attack history (edge, atk_time)
-            self.hist[self.env.now] = vul_edge
+            if self.atk_cnt < self.max_cnt:
+                # Select an edge to disrupt that chosen by the agent
+                for idx, edge in enumerate(self.edges):
+                    if idx == self.target:
+                        vul_edge = edge
+                        self.target = None # initialize target (given action)
+                
+                # Change expected time cost to infinity
+                self.G.edges[vul_edge]['expected_delay'] = float('inf')
+                self.G.edges[vul_edge]['alive'] = False
+                
+                # Log attack history (edge, atk_time)
+                self.hist[self.env.now] = vul_edge
 
-            # Reset edge count to get count per attack rate in next iteration
-            term_cnt = {}
-            for edge in self.G.edges:
-              term_cnt[edge] = self.G.edges[edge]['edge_cnt']
-              self.G.edges[edge]['acc_edge_cnt'] += self.G.edges[edge]['edge_cnt']
-            nx.set_edge_attributes(self.G, 0, 'edge_cnt')
-            self.term_edge_cnt.append(term_cnt)
-            
-            # Reroute to avoid the disrupted edge, as later as possible before arriving the edge
-            self.reroute(vul_edge)
+                # Reset edge count to get count per attack rate in next iteration
+                term_cnt = {}
+                for edge in self.G.edges:
+                    term_cnt[edge] = self.G.edges[edge]['edge_cnt']
+                    self.G.edges[edge]['acc_edge_cnt'] += self.G.edges[edge]['edge_cnt']
 
-            self.atk_cnt += 1
-            self.last_atk_time = self.env.now
+                nx.set_edge_attributes(self.G, 0, 'edge_cnt')
+                self.term_edge_cnt.append(term_cnt)
+                
+                # Reroute to avoid the disrupted edge, as later as possible before arriving the edge
+                self.reroute()
+
+                self.atk_cnt += 1
+                self.last_atk_time = self.env.now
 
             yield self.env.timeout(self.atk_rate)
-            
-    def reroute(self, vul_edge): 
-        disrupted_start = vul_edge[0]
-        disrupted_end = vul_edge[1]
-        
+
+    def reroute(self): 
         for edge in self.G.edges:
             q = self.tg.Q_dic[edge]
             for vehicle in q:
-                
-                # Is this vehicle go through the disrupted edge?
-                if disrupted_start in vehicle.path:
-                    disrupted_idx = vehicle.path.index(disrupted_start)
-                    next_node_idx = vehicle.e_idx + 1
-                    
-                    # not yet reached the disrupted edge?
-                    if next_node_idx <= disrupted_idx:
-                        
-                        next_node = vehicle.path[next_node_idx]
-                        cost2goal = nx.shortest_path_length(self.G, next_node, vehicle.dst, weight='expected_delay')
-                        
-                        # Is there any alternative path after disruption?
-                        if cost2goal != float('inf'):
-                        
-                            # reroute at the nearest node from the disrupted edge in the path
-                            for i in reversed(range(next_node_idx, disrupted_idx + 1)):
-                                reroute_node_idx = i
-                                reroute_node = vehicle.path[reroute_node_idx]
-                                left_path = vehicle.path[reroute_node_idx:]
-                                
-                                try :
-                                    new_path_cost = nx.shortest_path_length(self.G, reroute_node, vehicle.dst, weight='expected_delay')
-                                    
-                                    if new_path_cost < float('inf'):
-                                        new_path = nx.shortest_path(self.G, reroute_node, vehicle.dst, weight='expected_delay')
-                                        if left_path != new_path: # reroute if there is a shorter path
-                                            history = vehicle.path[:reroute_node_idx]
-                                            new_route = history + new_path
-                                            vehicle.path = new_route
-                                    
-                                except Exception as error:
-                                    #print('[Re-routing]', error)
-                                    pass
+                # the index of the node that this vehicle is moving toward on the current edge
+                next_node_idx = vehicle.e_idx + 1
+
+                next_node = vehicle.path[next_node_idx]
+                left_path = vehicle.path[next_node_idx:]
+                new_path = nx.shortest_path(self.G, next_node, vehicle.dst, weight='expected_delay')
+
+                if left_path != new_path: # reroute if there is a shorter path
+                    history = vehicle.path[:next_node_idx]
+                    new_route = history + new_path
+                    vehicle.path = new_route
 
 class ROADNET(object):
-    def __init__(self, num_cand):
+    def __init__(self):
         # Define variables
-        self.G = None
+        self.G = pickle.load(pkg_resources.resource_stream(__name__, 'data/Davis_super_simplified_graph.pkl'))
         self.env = None
         self.tg = None
         self.mv = None
         self.edge_atk = None
         self.rr = None
-        self.NUM_CAND = num_cand
-        self.ONEHOT_CAND = LabelBinarizer().fit_transform(np.arange(0, self.NUM_CAND, 1))
-
-        self.init_graph()
 
     def init_graph(self):
-        # Set boundaries and filters
-        north, south, east, west = 38.5754, 38.5156, -121.6759, -121.7941
-        rf = '["highway"~"motorway|motorway_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link"]'
+        # load road network from a binary pickle file 
+        self.G = pickle.load(pkg_resources.resource_stream(__name__, 'data/Davis_super_simplified_graph.pkl'))
 
-        # load data
-        G = ox.graph_from_bbox(north, south, east, west, network_type='drive', custom_filter=rf)
-        
-        ebunch = []
-
-        for (u,v,k) in G.edges:  
-            if k != 0:
-                ebunch.append((u,v,k))
-        G.remove_edges_from(ebunch)
-
-        nx.set_edge_attributes(G, 0, 'peak_traffic')
-        nx.set_edge_attributes(G, 0, 'saturation')
-        nx.set_edge_attributes(G, 0, 'edge_cnt')
-        nx.set_edge_attributes(G, 0, 'acc_edge_cnt')
-        nx.set_edge_attributes(G, True, 'alive')
-
-        # Set default speed of vehicles on each type of road
-        hwy_speeds = {'motorway': 110,
-                    'motorway_link': 60,
-                    'primary': 60,
-                    'primary_link': 50,
-                    'secondary': 50,
-                    'secondary_link': 40,
-                    'tertiary': 40,
-                    'tertiary_link': 40}
-
-        # Plug in to the graph. 'speed_kph' attribute is added to each edge and set to the default speed.
-        G = ox.add_edge_speeds(G, hwy_speeds)
-
-        # Add 'travel_time' property to each node, which is 'length' divided by 'speed_kph'
-        G = ox.add_edge_travel_times(G)
-        travel_time = nx.get_edge_attributes(G, 'travel_time')
-        nx.set_edge_attributes(G, travel_time,'total_delay') # initialize 'total_delay' attributes
-        nx.set_edge_attributes(G, travel_time,'expected_delay') # initialize 'expected_delay' attributes
-
-        self.G = G
-
-    def init_env(self):
+        # initialize environment
         self.env = simpy.Environment()
         self.tg = Traffic_Gen(self.env, self.G) 
         self.mv = Moving_Process(self.env, self.G, self.tg)
         self.edge_atk = Edge_Attack(self.env, self.G, self.tg) 
 
-        self.rr = []
-        if GV.REROUTE == True:
-            for i in range(0, GV.ROUTE_GRP_NUM):
-                grp_num = i
-                intv = GV.REROUTE_INTV[i]
-                self.rr.append(Reroute_Process(self.env, self.G, self.tg, grp_num, intv))
+        self.env.run(GV.WARMING_UP) # run right before the first disruption
     
     def get_state(self):
-        edge_cap = {}
+        Q_len = dict.fromkeys(self.G.edges, 0)
+        fwd_cnt = dict.fromkeys(self.G.edges, 0)
+
         for edge in self.G.edges:
-            edge_cap[edge] = self.G.edges[edge]['length'] * self.G.edges[edge]['lanes']
-        edge_sat = nx.get_edge_attributes(self.G, 'saturation')
-        visit_cnt = nx.get_edge_attributes(self.G, 'edge_cnt')
-
-        nx.set_edge_attributes(self.G, 0, '1hop_cnt')
-        nx.set_edge_attributes(self.G, 0, '2hop_cnt')
-        for e in self.G.edges:
-            for v in self.tg.Q_dic[e]:
-                current_node_idx = v.e_idx
-                next_node_idx = v.e_idx + 1
-                sec_next_node_idx = v.e_idx +2
-
-                if next_node_idx < len(v.path):
-                    current_node = v.path[current_node_idx]
-                    next_node = v.path[next_node_idx]
-                    next_edge = (current_node, next_node, 0)
-                    self.G.edges[next_edge]['1hop_cnt'] += 1
-                
-                if sec_next_node_idx < len(v.path):
-                    sec_next_node = v.path[sec_next_node_idx]
-                    sec_next_edge = (next_node, sec_next_node, 0)
-                    self.G.edges[sec_next_edge]['2hop_cnt'] += 1
-        
-        one_hop_cnt = nx.get_edge_attributes(self.G, '1hop_cnt')
-        two_hop_cnt = nx.get_edge_attributes(self.G, '2hop_cnt')
-        is_alive = nx.get_edge_attributes(self.G, 'alive')
-        
-        # Get betweenness centrality of each edge
-        D = nx.DiGraph(self.G)
-        raw_bc = nx.edge_betweenness_centrality(D, weight='total_delay')
-
-        # convert (u,v) format to (u,v,k) format
-        edge_bc = {}
-        for (u, v), value in raw_bc.items():
-            edge_bc[(u, v, 0)] = value
-        
-        # Get the k-candidate edges
-        cand_dic = {}
-        cnt = nx.get_edge_attributes(self.G, 'edge_cnt')
-
-        removed_edges = list(self.edge_atk.hist.values())
-        for e in removed_edges:
-            del cnt[e]
-
-        sorted_cnt = sorted(cnt.items(), reverse=True, key=lambda d:d[1])
-
-        for i, d in enumerate(sorted_cnt[:self.NUM_CAND]):
-            edge = d[0]
-            rank = i
-            cand_dic[edge] = rank
-        
-        self.edge_atk.cand = cand_dic
-
+            Q = self.tg.Q_dic[edge]
+            Q_len[edge] = len(Q)
+            for vehicle in Q:
+                current_node_idx = vehicle.e_idx
+                next_node_idx = vehicle.e_idx + 1
+                current_node = vehicle.path[current_node_idx]
+                last_src_node = vehicle.path[-2]
+                if current_node != last_src_node:
+                    start_nodes = vehicle.path[current_node_idx:-2]
+                    end_nodes = vehicle.path[next_node_idx:-1]
+                    keys = [0] * len(start_nodes)  # we use simplified graph without multi-edges
+                    
+                    forward_edges = zip(start_nodes, end_nodes, keys)
+                    for fwd_edge in forward_edges:
+                        fwd_cnt[fwd_edge] += 1
         
         # Get status of edges and vectorize it
         edge_vecs = []
 
-        for edge in self.G.edges:
-            edge_stat = np.array([edge_cap[edge], edge_sat[edge], visit_cnt[edge], one_hop_cnt[edge], two_hop_cnt[edge], is_alive[edge], edge_bc[edge]])
-            if edge in cand_dic:
-                cand_rank = cand_dic[edge]
-                cand_vec = self.ONEHOT_CAND[cand_rank]
-            else:
-                cand_vec = np.full(self.NUM_CAND, 0)
+        for u,v,k,d in self.G.edges(keys=True, data=True):
+            edge_len = int(d['length'])
+            edge_cap = int(edge_len * int(d['lanes']) / GV.VEHICLE_LENGTH)
+            vis_cnt = int(d['edge_cnt'])
+            is_alive = int(d['alive'])
+            edge_Q_len = int(Q_len[(u,v,k)])
+            edge_fwd_cnt = int(fwd_cnt[(u,v,k)])
+            speed_limit = int(d['speed_kph'])
 
-            edge_vec = np.append(edge_stat, cand_vec)
-            edge_vecs.append(edge_vec)
+            edge_stat = np.array([edge_cap, edge_Q_len, vis_cnt, edge_fwd_cnt, is_alive, speed_limit, edge_len])
+
+            edge_vecs.append(edge_stat)
         
         # Concatenate state information
         ob = np.concatenate(edge_vecs)
@@ -682,8 +626,11 @@ class ROADNET(object):
         return ob
         
     def disrupt(self, action):
-        self.edge_atk.disrupt_order = action
-        elapsed_time = GV.WARMING_UP + self.edge_atk.atk_rate * (self.edge_atk.atk_cnt + 1)
+        self.edge_atk.target = action
+        if self.edge_atk.atk_cnt == 4:
+            elapsed_time = 3500
+        else:
+            elapsed_time = GV.WARMING_UP + self.edge_atk.atk_rate * (self.edge_atk.atk_cnt + 1)
         self.env.run(until=elapsed_time)
         
 

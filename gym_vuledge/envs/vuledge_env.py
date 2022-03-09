@@ -14,30 +14,27 @@ class VulEdgeEnv(gym.Env):
         super(VulEdgeEnv, self).__init__()
 
         # General variables defining the environment
-        self.NUM_CAND = 10
-        self.ONEHOT_CAND = LabelBinarizer().fit_transform(np.arange(0, self.NUM_CAND, 1))  # one-hot encode the k-candidates
-        self.NUM_DISRUPT = 3
+        self.NUM_DISRUPT = 5
 
         # Load backbone road network 
-        self.net = ROADNET(self.NUM_CAND)
+        self.net = ROADNET()
         self.NUM_EDGE = self.net.G.number_of_edges()
         
         # Action. Define what the agent can do
         # Select the most vulnerable edge from the k-candidates
-        self.action_space = spaces.Discrete(self.NUM_CAND)
+        self.action_space = spaces.Discrete(self.NUM_EDGE)
 
         # Observation
-        low = np.zeros(self.NUM_EDGE * 17)
+        low = np.zeros(self.NUM_EDGE * 7)
 
-        high_tmp1 = np.array([5000*5, 3, 2000, 2000, 2000])  # cap, sat, vis cnt, 1hop inst, 2hop inst
-        high_tmp2 = np.full(1 + 1 + self.NUM_CAND, 1) # alive or not, bc, onehot cand
-        high_edge = np.append(high_tmp1, high_tmp2) 
+        # cap veh, current veh, vis cnt, forward_flow_cnt, alive_or_not, speed_limit, length
+        high_per_edge = np.array([3000, 3000, 1000, 3000, 1, 110, 3000])
 
         high = np.array([])
         for i in range(0, self.NUM_EDGE):
-            high = np.append(high, high_edge)
+            high = np.append(high, high_per_edge)
 
-        self.observation_space = spaces.Box(low, high, shape=(self.NUM_EDGE * 17, ), dtype=np.float64)
+        self.observation_space = spaces.Box(low, high, shape=(self.NUM_EDGE * 7, ), dtype=np.int16)
         
         # episode over
         self.episode_over = True
@@ -91,30 +88,13 @@ class VulEdgeEnv(gym.Env):
 
     def get_reward(self):
 
-        # reward as the average term delay
-        curr_time = self.net.env.now
-        acc_delay = 0
-        v_cnt = 0
-        atk_time = self.net.edge_atk.last_atk_time
-
-        # Get delay of vehicles on the way
-        for edge in self.net.G.edges:
-            for v in self.net.tg.Q_dic[edge]:
-                if v.gen_time < atk_time:
-                    delay = curr_time - atk_time
-                else:
-                    delay = curr_time - v.gen_time
-                acc_delay += delay
-                v_cnt += 1
-
-        # Get delay of vehicles finished their travels
-        for v in self.net.mv.finished:
-            if v.arrival_time >= atk_time:
-                delay = v.arrival_time - atk_time
-                acc_delay += delay
-                v_cnt += 1
+        # reward as the difference in the # of vehicles between current system and baseline
+        # baseline is the expected number of vehicles in network without any disruption
+        baselines = [873, 919, 943, 765, 103] # averaged over 100 simulations
+        vnum_wo_disruption = baselines[self.net.edge_atk.atk_cnt - 1]
+        current_vnum = self.net.mv.v_num[-1]
         
-        reward = acc_delay / v_cnt
+        reward = current_vnum - vnum_wo_disruption
 
         return reward
 
@@ -131,10 +111,6 @@ class VulEdgeEnv(gym.Env):
 
         # initialize graph and simpy env
         self.net.init_graph()
-        self.net.init_env()
-                       
-        # run simulation until the end of warming-up time to get the initial observation
-        self.net.env.run(until=GV.WARMING_UP)
 
         return self.net.get_state()
 
