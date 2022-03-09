@@ -1,10 +1,8 @@
-import osmnx as ox
 import networkx as nx
 import numpy as np
 import random
 import simpy
 import pickle
-import pandas as pd
 import pkg_resources
 
 class GV:
@@ -340,7 +338,7 @@ class Moving_Process(object):
             epsilon = 0.01
             
             log_time = self.env.now % 20
-            print_time = self.env.now % 100
+            #print_time = self.env.now % 100
             
             if log_time < epsilon or abs(log_time) > 20 - epsilon: 
                 # Log the number of vehicles in the network in every 20 seconds
@@ -350,7 +348,7 @@ class Moving_Process(object):
                 
                 self.v_num.append(vn)
                 
-            if print_time < epsilon or abs(print_time) > 100 - epsilon: print("Simulation time: {0}".format(self.env.now))
+            #if print_time < epsilon or abs(print_time) > 100 - epsilon: print("Simulation time: {0}".format(self.env.now))
             
     def vehicle_entry(self, edge, vehicle):
         # Add vehicle to the queue of selected edge
@@ -564,12 +562,14 @@ class Edge_Attack(object):
 class ROADNET(object):
     def __init__(self):
         # Define variables
-        self.G = pickle.load(pkg_resources.resource_stream(__name__, 'data/Davis_super_simplified_graph.pkl'))
+        self.G = None
         self.env = None
         self.tg = None
         self.mv = None
         self.edge_atk = None
         self.rr = None
+
+        self.init_graph()
 
     def init_graph(self):
         # load road network from a binary pickle file 

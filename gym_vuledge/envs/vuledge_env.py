@@ -1,11 +1,8 @@
 import gym
 from gym import spaces
 import numpy as np
-from sklearn.preprocessing import LabelBinarizer
-import random
-from gym_vuledge.envs.roadnet import ROADNET, GV
+from gym_vuledge.envs.roadnet import ROADNET
 import logging
-import networkx as nx
 
 class VulEdgeEnv(gym.Env):
     """A vulnerable edge detection environment for OpenAI gym"""
@@ -37,7 +34,7 @@ class VulEdgeEnv(gym.Env):
         self.observation_space = spaces.Box(low, high, shape=(self.NUM_EDGE * 7, ), dtype=np.int16)
         
         # episode over
-        self.episode_over = True
+        self.episode_over = False
         self.info = {}
 
     def step(self, action):
