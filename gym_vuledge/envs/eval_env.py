@@ -68,30 +68,37 @@ class EvalEnv(gym.Env):
                 use this for learning.
         """
 
-        self.take_action(action)
-        reward = self.get_reward()
+        is_dup_action = self.take_action(action)
+        reward = self.get_reward(is_dup_action)
         ob = self.net.get_state()
 
         return ob, reward, self.episode_over, self.info 
 
     def take_action(self, action):             
         
-        self.net.disrupt(action)
+        is_dup_action = self.net.disrupt(action)
 
         # End episode if finished
         if self.net.edge_atk.atk_cnt == self.NUM_DISRUPT:
             logging.info ('Disrupted all edges, ending episode')
             self.episode_over = True
 
-    def get_reward(self):
+        return is_dup_action
+
+    def get_reward(self, is_dup_action):
 
         # reward as the difference in the # of vehicles between current system and baseline
         # baseline is the expected number of vehicles in network without any disruption
         baselines = [873, 919, 943, 765, 103] # averaged over 100 simulations
         vnum_wo_disruption = baselines[self.net.edge_atk.atk_cnt - 1]
         current_vnum = self.net.mv.v_num[-1]
-        
-        reward = current_vnum - vnum_wo_disruption
+
+        if is_dup_action: penalty = 1000
+        else: penalty = -10
+
+        reward = current_vnum - vnum_wo_disruption - penalty
+
+        if self.net.edge_atk.atk_cnt == 5: reward = reward * 3 #higher reward at the end of episode
 
         return reward
 

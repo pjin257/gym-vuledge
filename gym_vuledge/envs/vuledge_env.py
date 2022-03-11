@@ -68,30 +68,39 @@ class VulEdgeEnv(gym.Env):
                 use this for learning.
         """
 
-        self.take_action(action)
-        reward = self.get_reward()
+        is_dup_action = self.take_action(action)
+        reward = self.get_reward(is_dup_action)
         ob = self.net.get_state()
 
         return ob, reward, self.episode_over, self.info 
 
     def take_action(self, action):             
         
-        self.net.disrupt(action)
+        is_dup_action = self.net.disrupt(action)
 
         # End episode if finished
         if self.net.edge_atk.atk_cnt == self.NUM_DISRUPT:
             logging.info ('Disrupted all edges, ending episode')
             self.episode_over = True
 
-    def get_reward(self):
+        return is_dup_action
+
+    def get_reward(self, is_dup_action):
 
         # reward as the difference in the # of vehicles between current system and baseline
         # baseline is the expected number of vehicles in network without any disruption
         baselines = [873, 919, 943, 765, 103] # averaged over 100 simulations
         vnum_wo_disruption = baselines[self.net.edge_atk.atk_cnt - 1]
         current_vnum = self.net.mv.v_num[-1]
-        
-        reward = current_vnum - vnum_wo_disruption
+
+        diff = current_vnum - vnum_wo_disruption
+
+        if self.net.edge_atk.atk_cnt == 5:
+            reward = diff # higher reward at the end of episode
+        else:
+            reward = diff / 3
+
+        if is_dup_action: reward = -300 # constant negative reward if action is duplicated
 
         return reward
 
