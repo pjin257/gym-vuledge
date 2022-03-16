@@ -10,7 +10,7 @@ import os
 import time
 
 class GV:
-    SIM_TIME = 6000 + 1
+    SIM_TIME = 15000 + 1
     GEN_RATE = 1.5
     GEN_END = 2000 * GEN_RATE
     ATK_RATE = 200
@@ -509,6 +509,7 @@ class Edge_Attack(object):
         # interprete action to target edge
         self.target = None
         self.edges = list(self.G.edges(keys=True))
+        self.past_actions = []
         self.last_atk_time = None
 
         # Term edge count after idx-th attack
@@ -524,6 +525,7 @@ class Edge_Attack(object):
                 for idx, edge in enumerate(self.edges):
                     if idx == self.target:
                         vul_edge = edge
+                        self.past_actions.append(self.target)
                         self.target = None # initialize target (given action)
                 
                 # Change expected time cost to infinity
@@ -636,6 +638,11 @@ class ROADNET(object):
         
     def disrupt(self, action):
         self.edge_atk.target = action
+        is_dup_action = False
+        
+        if action in self.edge_atk.past_actions:
+            is_dup_action = True
+
         if self.edge_atk.atk_cnt == 4:
             self.env.run(until=GV.SIM_TIME)
             GV.END_WALL_TIME = time.time()
@@ -643,6 +650,8 @@ class ROADNET(object):
         else:
             elapsed_time = GV.WARMING_UP + self.edge_atk.atk_rate * (self.edge_atk.atk_cnt + 1)
             self.env.run(until=elapsed_time)
+
+        return is_dup_action
         
 
     def save_log(self):

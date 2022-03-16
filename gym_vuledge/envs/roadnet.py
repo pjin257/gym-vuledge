@@ -633,6 +633,7 @@ class ROADNET(object):
         
         if action in self.edge_atk.past_actions:
             is_dup_action = True
+            
         if self.edge_atk.atk_cnt == 4:
             elapsed_time = GV.SIM_TIME
         else:

@@ -89,16 +89,18 @@ class EvalEnv(gym.Env):
 
         # reward as the difference in the # of vehicles between current system and baseline
         # baseline is the expected number of vehicles in network without any disruption
-        baselines = [873, 919, 943, 765, 103] # averaged over 100 simulations
+        baselines = [873, 919, 943, 765, 0] # averaged over 100 simulations
         vnum_wo_disruption = baselines[self.net.edge_atk.atk_cnt - 1]
         current_vnum = self.net.mv.v_num[-1]
 
-        if is_dup_action: penalty = 1000
-        else: penalty = -10
+        diff = current_vnum - vnum_wo_disruption
 
-        reward = current_vnum - vnum_wo_disruption - penalty
+        if self.net.edge_atk.atk_cnt == 5:
+            reward = diff # higher reward at the end of episode
+        else:
+            reward = diff / 3
 
-        if self.net.edge_atk.atk_cnt == 5: reward = reward * 3 #higher reward at the end of episode
+        if is_dup_action: reward = -300 # constant negative reward if action is duplicated
 
         return reward
 
