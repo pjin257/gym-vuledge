@@ -32,9 +32,9 @@ class GV:
     CP_2 = 0.8
     NEXT_CP = 0.5
     
-    links = [
-        'Motorway_link', 'Primary_link',
-        'Secondary_link', 'Tertiary_link'
+    DISRUPT_TYPE = [
+        'motorway', 'primary',
+        'secondary', 'tertiary'
     ]
 
 # Traffic generation process
@@ -220,7 +220,7 @@ class Traffic_Gen(object):
 
         for (u, v) in self.G.out_edges(next_node):
             if v != current_node:
-                if self.G.edges[(u, v, 0)]['saturation'] > GV.NEXT_CP and self.G.edges[(u, v, 0)]['highway'] not in GV.links:
+                if self.G.edges[(u, v, 0)]['saturation'] > GV.NEXT_CP:
                     next_edge_congested = True
 
         if saturation < cp1:
@@ -430,7 +430,7 @@ class Moving_Process(object):
 
         for (u, v) in self.G.out_edges(next_node):
             if v != current_node:
-                if self.G.edges[(u, v, 0)]['saturation'] > GV.NEXT_CP and self.G.edges[(u, v, 0)]['highway'] not in GV.links:
+                if self.G.edges[(u, v, 0)]['saturation'] > GV.NEXT_CP:
                     next_edge_congested = True
 
         if saturation < cp1:

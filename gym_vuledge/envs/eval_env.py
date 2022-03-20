@@ -19,7 +19,7 @@ class EvalEnv(gym.Env):
         
         # Action. Define what the agent can do
         # Select the most vulnerable edge from the k-candidates
-        self.action_space = spaces.Discrete(self.NUM_EDGE)
+        self.action_space = spaces.Discrete(len(self.net.edge_atk.candidates))
 
         # Observation
         low = np.zeros(self.NUM_EDGE * 7)
