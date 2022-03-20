@@ -503,7 +503,6 @@ class Edge_Attack(object):
         # interprete action to target edge
         self.target = None
         self.candidates = None
-        self.edges = list(self.G.edges(keys=True))
         self.past_actions = []
         self.last_atk_time = None
 

@@ -508,7 +508,7 @@ class Edge_Attack(object):
 
         # interprete action to target edge
         self.target = None
-        self.edges = list(self.G.edges(keys=True))
+        self.candidates = None
         self.past_actions = []
         self.last_atk_time = None
 
@@ -522,7 +522,7 @@ class Edge_Attack(object):
         while True:                        
             if self.atk_cnt < self.max_cnt:
                 # Select an edge to disrupt that chosen by the agent
-                for idx, edge in enumerate(self.edges):
+                for idx, edge in enumerate(self.candidates):
                     if idx == self.target:
                         vul_edge = edge
                         self.past_actions.append(self.target)
@@ -584,11 +584,18 @@ class ROADNET(object):
         # load road network from a binary pickle file 
         self.G = pickle.load(pkg_resources.resource_stream(__name__, 'data/Davis_super_simplified_graph.pkl'))
 
+        candidates = []
+        for u,v,k,d in self.G.edges(keys=True, data=True):
+            edge = (u,v,k)
+            if d['highway'] in GV.DISRUPT_TYPE:
+                candidates.append(edge)
+
         # initialize environment
         self.env = simpy.Environment()
         self.tg = Traffic_Gen(self.env, self.G) 
         self.mv = Moving_Process(self.env, self.G, self.tg)
         self.edge_atk = Edge_Attack(self.env, self.G, self.tg) 
+        self.edge_atk.candidates = candidates
 
         GV.START_WALL_TIME = time.time()
 

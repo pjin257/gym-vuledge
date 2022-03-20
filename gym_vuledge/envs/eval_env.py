@@ -100,7 +100,7 @@ class EvalEnv(gym.Env):
         else:
             reward = diff / 3
 
-        if is_dup_action: reward = -300 # constant negative reward if action is duplicated
+        if is_dup_action: reward = 0 # constant negative reward if action is duplicated
 
         return reward
 
