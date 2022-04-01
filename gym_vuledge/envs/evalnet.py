@@ -10,7 +10,7 @@ import os
 import time
 
 class GV:
-    SIM_TIME = 15000 + 1
+    SIM_TIME = 20000 + 1
     GEN_RATE = 1.5
     GEN_END = 2000 * GEN_RATE
     ATK_RATE = 200
