@@ -9,6 +9,11 @@ register(
 )
 
 register(
+    id='reverse-v1',
+    entry_point='gym_vuledge.envs:ReverseEnv',
+)
+
+register(
     id='eval-v1',
     entry_point='gym_vuledge.envs:EvalEnv',
 )
