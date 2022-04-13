@@ -19,7 +19,7 @@ class EvalEnv(gym.Env):
         
         # Action. Define what the agent can do
         # Select the most vulnerable edge from the k-candidates
-        self.action_space = spaces.Discrete(self.NUM_EDGE)
+        self.action_space = spaces.Discrete(len(self.net.edge_atk.candidates))
 
         # Observation
         low = np.zeros(self.NUM_EDGE * 7)
@@ -89,18 +89,22 @@ class EvalEnv(gym.Env):
 
         # reward as the difference in the # of vehicles between current system and baseline
         # baseline is the expected number of vehicles in network without any disruption
-        baselines = [873, 919, 943, 765, 0] # averaged over 100 simulations
+        baselines = [873, 919, 943, 765, 103] # averaged over 100 simulations
         vnum_wo_disruption = baselines[self.net.edge_atk.atk_cnt - 1]
         current_vnum = self.net.mv.v_num[-1]
 
         diff = current_vnum - vnum_wo_disruption
 
         if self.net.edge_atk.atk_cnt == 5:
+            time_at_terminate_state = int(3500 / 20)
+            vnum_at_terminate_state = self.net.mv.v_num[time_at_terminate_state]
+            diff = vnum_at_terminate_state - vnum_wo_disruption
+            
             reward = diff # higher reward at the end of episode
         else:
             reward = diff / 3
 
-        if is_dup_action: reward = -300 # constant negative reward if action is duplicated
+        if is_dup_action: reward = 0 # constant negative reward if action is duplicated
 
         return reward
 

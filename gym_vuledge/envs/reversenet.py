@@ -1,29 +1,22 @@
 import networkx as nx
-import osmnx as ox
 import numpy as np
 import random
 import simpy
 import pickle
 import pkg_resources
-import matplotlib.pyplot as plt
-import os
-import time
 
 class GV:
-    SIM_TIME = 20000 + 1
+    SIM_TIME = 3500 + 1
     GEN_RATE = 1.5
     GEN_END = 2000 * GEN_RATE
     ATK_RATE = 200
 
     MOVE_INTV = 1
-    REROUTE_INTV = None
+    
+    REROUTE = None
+
     VEHICLE_LENGTH = 4.5
     WARMING_UP = 1000
-
-    LOG_DIR = os.getcwd() + '/results'
-    ITER_NUM = 0
-    START_WALL_TIME = None
-    END_WALL_TIME = None
 
     BETA_1 = 1
     BETA_2 = 3
@@ -36,6 +29,7 @@ class GV:
         'motorway', 'primary',
         'secondary', 'tertiary'
     ]
+
 
 # Traffic generation process
 class Traffic_Gen(object): 
@@ -96,40 +90,40 @@ class Traffic_Gen(object):
         
         self.nodes = list(self.G.nodes)
         
-        # compute org. node sampling weight
-        nx.set_node_attributes(self.G, 1, 'org_w')
-        general_org_num = len(self.nodes) - len(self.i80w) - len(self.i80e)
+        # compute dst. node sampling weight
+        nx.set_node_attributes(self.G, 1, 'dst_w')
+        general_dst_num = len(self.nodes) - len(self.i80w) - len(self.i80e)
         
         # Other nodes are sampled at 75% of probability
-        i80w_prob = general_org_num * 15 / 75
-        i80e_prob = general_org_num * 10 / 75
+        i80w_prob = general_dst_num * 15 / 75
+        i80e_prob = general_dst_num * 10 / 75
 
         for node in self.G.nodes():
             if node in self.i80w:
-                self.G.nodes[node]['org_w'] = i80w_prob / len(self.i80w)
+                self.G.nodes[node]['dst_w'] = i80w_prob / len(self.i80w)
             elif node in self.i80e:
-                self.G.nodes[node]['org_w'] = i80e_prob / len(self.i80e)
+                self.G.nodes[node]['dst_w'] = i80e_prob / len(self.i80e)
                 
-        self.org_weights = [self.G.nodes[node]['org_w'] for node in self.nodes]
+        self.dst_weights = [self.G.nodes[node]['dst_w'] for node in self.nodes]
         
-        # compute dst. node sampling weight
-        nx.set_node_attributes(self.G, 1, 'dst_w')
-        general_dst_num = len(self.nodes) - len(self.ucd) - len(self.groceries) - len(self.downtown)
+        # compute org. node sampling weight
+        nx.set_node_attributes(self.G, 1, 'org_w')
+        general_org_num = len(self.nodes) - len(self.ucd) - len(self.groceries) - len(self.downtown)
 
         # Other nodes are sampled at 30% of probability
-        ucd_prob = general_dst_num * 5 / 3      # 50% from UCD
-        downtown_prob = general_dst_num / 3     # 10% from downtown area
-        groceries_prob = general_dst_num / 3    # 10% from groceries
+        ucd_prob = general_org_num * 5 / 3      # 50% from UCD
+        downtown_prob = general_org_num / 3     # 10% from downtown area
+        groceries_prob = general_org_num / 3    # 10% from groceries
 
         for node in self.G.nodes():
             if node in self.ucd:
-                self.G.nodes[node]['dst_w'] = ucd_prob / len(self.ucd)
+                self.G.nodes[node]['org_w'] = ucd_prob / len(self.ucd)
             elif node in self.downtown:
-                self.G.nodes[node]['dst_w'] = downtown_prob / len(self.downtown)
+                self.G.nodes[node]['org_w'] = downtown_prob / len(self.downtown)
             elif node in self.groceries:
-                self.G.nodes[node]['dst_w'] = groceries_prob / len(self.groceries)
+                self.G.nodes[node]['org_w'] = groceries_prob / len(self.groceries)
         
-        self.dst_weights = [self.G.nodes[node]['dst_w'] for node in self.nodes]
+        self.org_weights = [self.G.nodes[node]['org_w'] for node in self.nodes]
         
         self.action = env.process(self.run())
         
@@ -597,8 +591,6 @@ class ROADNET(object):
         self.edge_atk = Edge_Attack(self.env, self.G, self.tg) 
         self.edge_atk.candidates = candidates
 
-        GV.START_WALL_TIME = time.time()
-
         self.env.run(GV.WARMING_UP) # run right before the first disruption
     
     def get_state(self):
@@ -649,187 +641,14 @@ class ROADNET(object):
         
         if action in self.edge_atk.past_actions:
             is_dup_action = True
-
+            
         if self.edge_atk.atk_cnt == 4:
-            self.env.run(until=GV.SIM_TIME)
-            GV.END_WALL_TIME = time.time()
-            self.save_log()
+            elapsed_time = GV.SIM_TIME
         else:
             elapsed_time = GV.WARMING_UP + self.edge_atk.atk_rate * (self.edge_atk.atk_cnt + 1)
-            self.env.run(until=elapsed_time)
+        self.env.run(until=elapsed_time)
 
         return is_dup_action
         
 
-    def save_log(self):
-        # Plot attacked edges on the map
-        dir = GV.LOG_DIR + '/' + str(GV.ITER_NUM) + '/'
-        os.makedirs(dir)
 
-        hist_list = list(self.edge_atk.hist.values())
-
-        removed = []
-        for e in hist_list:
-            removed.append( [e[0], e[1]] )
-
-        c_pool = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-        rc = []
-
-        for i in range(0, len(removed)):
-            rc.append(c_pool[i])
-
-        atk_fig, atk_ax = ox.plot.plot_graph_routes(self.G, removed, figsize=(30,18), route_colors=rc, 
-                                                    route_linewidth=6, route_alpha=0.8, orig_dest_size=100,
-                                                    ax=None, node_size=20, node_color='black',
-                                                    edge_linewidth=0.5, edge_color='black', 
-                                                    show=False, close=False, bgcolor='white')
-
-        for i, e in enumerate(removed):
-            start_node = e[0]
-            end_node = e[1]
-            start_coord = (self.G.nodes[start_node]['x'] - 0.0006, self.G.nodes[start_node]['y'] - 0.0006)
-            end_coord =  (self.G.nodes[end_node]['x'] - 0.0006, self.G.nodes[end_node]['y'] - 0.0006)
-
-            # Annotate node ID if needed
-            #atk_ax.annotate(start_node, xy=start_coord, color='white', weight='bold')
-            #atk_ax.annotate(end_node, xy=end_coord, color='blue', weight='bold')
-
-            middle_coord = (start_coord[0] + 0.5*(end_coord[0] - start_coord[0]), start_coord[1] + 0.5*(end_coord[1] - start_coord[1]))
-
-            arrow_len = 0.001
-
-            x_s = start_coord[0]
-            y_s = start_coord[1]
-            x_e = end_coord[0]
-            y_e = end_coord[1]
-            x_m = middle_coord[0]
-            y_m = middle_coord[1]
-
-            x_diff = x_s - x_m
-            y_diff = y_s - y_m
-            grad = y_diff / x_diff
-
-            x_sign = x_diff / abs(x_diff)
-            y_sign = y_diff / abs(y_diff)
-
-            arrow_start_coord = (middle_coord[0] + 0.3*(start_coord[0] - middle_coord[0]), middle_coord[1] + 0.3*(start_coord[1] - middle_coord[1]))
-            arrow_end_coord = (middle_coord[0] + 0.3*(end_coord[0] - middle_coord[0]), middle_coord[1] + 0.3*(end_coord[1] - middle_coord[1]))    
-            dist = (((arrow_start_coord[0]-arrow_end_coord[0])**2 + (arrow_start_coord[1] - arrow_end_coord[1])**2)**0.5)
-
-            if dist < 0.003:
-                    x_mov = x_sign*((arrow_len**2 / (1 + grad**2))**0.5)
-                    y_mov = y_sign*((arrow_len**2 - x_mov**2) ** 0.5)
-                    arrow_start_coord = (middle_coord[0] + x_mov, middle_coord[1] + y_mov)
-                    arrow_end_coord = (middle_coord[0] - x_mov, middle_coord[1] - y_mov)
-
-            atk_ax.annotate('', xy= arrow_end_coord, color='blue', weight='bold', xytext= arrow_start_coord, textcoords='data', arrowprops=dict(color=rc[i], headwidth=10, headlength=10, lw=1))
-
-        # Add legend
-        line_label, = plt.plot([0, 0, 0], label='1st', c='none', linewidth = 0)
-        line_1st, = plt.plot([0, 0, 0], label='1st', c=rc[0], linewidth = 6)
-        line_2nd, = plt.plot([0, 0, 0], label='2nd', c=rc[1], linewidth = 6)
-        line_3rd, = plt.plot([0, 0, 0], label='3rd', c=rc[2], linewidth = 6)
-        line_4th, = plt.plot([0, 0, 0], label='4th', c=rc[3], linewidth = 6)
-        line_5th, = plt.plot([0, 0, 0], label='5th', c=rc[4], linewidth = 6)
-
-
-        plt.legend([line_label, line_1st, line_2nd, line_3rd, line_4th, line_5th], ['Top-5 edges', '1st', '2nd', '3rd', '4th', '5th'], prop={'size': 20})
-
-        plt.savefig(dir + 'Attacked_edges_map.png')
-        plt.close('all')
-        
-        disrupted = self.edge_atk.hist.values()
-
-        disrupted_fname = dir + 'disrupted.txt'
-        with open(disrupted_fname, "w") as output:
-            for value in disrupted:
-                output.write(str(value) + '\n')
-
-        # Save travel time
-        finished_travelTime = []
-        for vehicle in self.mv.finished:
-            travelTime = vehicle.arrival_time - vehicle.gen_time
-            finished_travelTime.append(travelTime)
-
-        sorted_finished_travelTime = sorted(finished_travelTime, reverse=True)
-        fd_fname = dir + 'finished_travelTime.txt'
-        with open(fd_fname, "w") as output:
-            for value in sorted_finished_travelTime:
-                output.write(str(value) + '\n')
-
-        onTheWay_travelTime = []
-        for edge in self.G.edges:
-            for vehicle in self.tg.Q_dic[edge]:
-                travelTime = GV.SIM_TIME - vehicle.gen_time
-                onTheWay_travelTime.append(travelTime)
-                
-        sorted_onTheWay_travelTime = sorted(onTheWay_travelTime, reverse=True)
-        otw_fname = dir + 'onTheWay_travelTime.txt'
-        with open(otw_fname, "w") as output:
-            for value in sorted_onTheWay_travelTime:
-                output.write(str(value) + '\n')
-                
-        # Save general stats
-        stat_fname = dir + 'stats.txt'
-
-        finished_sum = sum(finished_travelTime)
-        otw_sum = sum(onTheWay_travelTime)
-        total_travelTime = finished_sum + otw_sum
-
-        with open(stat_fname, "w") as output:
-            output.write(str(self.tg.vehicle_number) + ' vehicles are generated' + '\n')
-            output.write(str(len(self.mv.finished)) + ' vehicles completed travel' + '\n')
-            output.write('Travel time sum. of finished travels: ' + str(finished_sum) + '\n')
-            output.write('Travel time sum. of vehicles on their way: ' + str(otw_sum) + '\n')
-            output.write('Total travel time sum.: ' + str(total_travelTime) + '\n')
-            output.write('Simulation runtime: ' + str(GV.START_WALL_TIME - GV.END_WALL_TIME) + '\n')
-
-        # Dump data for debugging
-        dat_dir = dir + "var_dat/"
-        os.mkdir(dat_dir)
-
-        nx.write_gpickle(self.G, dat_dir + "graph.gpickle")
-
-        with open(dat_dir + "Q_dic.p", 'wb') as f:
-            pickle.dump(self.tg.Q_dic, f)
-            
-        with open(dat_dir + "delay_dic.p", 'wb') as f:
-            pickle.dump(self.tg.delay_dic, f)
-            
-        with open(dat_dir + "finished.p", 'wb') as f:
-            pickle.dump(self.mv.finished, f)
-
-        with open(dat_dir + "v_num.p", 'wb') as f:
-            pickle.dump(self.mv.v_num, f)
-
-
-        vnum_fname = dir + 'vnum_gr-' + str(GV.GEN_RATE) + '_rr-' + str(GV.REROUTE_INTV) +'.txt'
-        with open(vnum_fname, "w") as output:
-            for value in self.mv.v_num:
-                output.write(str(value) + '\n')
-
-        num_dp = ((GV.SIM_TIME - 1) / 20) + 1
-        x = [ i*20 for i in range(int(num_dp)) ]
-
-        x2 = [ i*20 for i in range(int(num_dp))]
-        y = [ t*GV.GEN_RATE for t in x2 ]
-
-        #dsrp_x = [800, 1100, 1400, 1700, 2000]
-
-        plt.plot(x, self.mv.v_num, label='Moving vehicles')
-        plt.plot(x2, y, label='Generated')
-                
-        plt.title('The number of vehicles')
-        plt.xlabel('Seconds') 
-        plt.ylabel('Counts')
-
-        plt.ylim(top=max(self.mv.v_num)*1.1, bottom=0)
-        plt.xlim(left=0)
-        plt.legend()
-
-        plt.savefig(dir + 'num_vehicle.png')
-        plt.close('all')
-
-        GV.ITER_NUM += 1
-        GV.START_WALL_TIME = None
-        GV.END_WALL_TIME = None
