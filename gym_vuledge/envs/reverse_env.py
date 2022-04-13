@@ -1,14 +1,14 @@
 import gym
 from gym import spaces
 import numpy as np
-from gym_vuledge.envs.roadnet import ROADNET
+from gym_vuledge.envs.reversenet import ROADNET
 import logging
 
-class VulEdgeEnv(gym.Env):
+class ReverseEnv(gym.Env):
     """A vulnerable edge detection environment for OpenAI gym"""
 
     def __init__(self):
-        super(VulEdgeEnv, self).__init__()
+        super(ReverseEnv, self).__init__()
 
         # General variables defining the environment
         self.NUM_DISRUPT = 5
@@ -89,7 +89,7 @@ class VulEdgeEnv(gym.Env):
 
         # reward as the difference in the # of vehicles between current system and baseline
         # baseline is the expected number of vehicles in network without any disruption
-        baselines = [873, 919, 943, 765, 103] # averaged over 100 simulations
+        baselines = [933, 982, 1031, 814, 317] # averaged over 100 simulations
         vnum_wo_disruption = baselines[self.net.edge_atk.atk_cnt - 1]
         current_vnum = self.net.mv.v_num[-1]
 
