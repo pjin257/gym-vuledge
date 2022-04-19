@@ -4,11 +4,11 @@ import numpy as np
 from gym_vuledge.envs.roadnet3d import ROADNET
 import logging
 
-class VulEdge3dEnv(gym.Env):
+class VulEdge4dEnv(gym.Env):
     """A vulnerable edge detection environment for OpenAI gym"""
 
     def __init__(self):
-        super(VulEdge3dEnv, self).__init__()
+        super(VulEdge4dEnv, self).__init__()
 
         # General variables defining the environment
         self.NUM_DISRUPT = 4
