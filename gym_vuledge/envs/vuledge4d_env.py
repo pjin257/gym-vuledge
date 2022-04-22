@@ -1,7 +1,7 @@
 import gym
 from gym import spaces
 import numpy as np
-from gym_vuledge.envs.roadnet3d import ROADNET
+from gym_vuledge.envs.roadnet4d import ROADNET
 import logging
 
 class VulEdge4dEnv(gym.Env):
