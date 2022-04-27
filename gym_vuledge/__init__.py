@@ -29,6 +29,21 @@ register(
 )
 
 register(
+    id='reverse2d-v1',
+    entry_point='gym_vuledge.envs:Reverse2dEnv',
+)
+
+register(
+    id='reverse3d-v1',
+    entry_point='gym_vuledge.envs:Reverse3dEnv',
+)
+
+register(
+    id='reverse4d-v1',
+    entry_point='gym_vuledge.envs:Reverse4dEnv',
+)
+
+register(
     id='eval-v1',
     entry_point='gym_vuledge.envs:EvalEnv',
 )

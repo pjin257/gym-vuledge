@@ -15,6 +15,15 @@ from gym_vuledge.envs.roadnet4d import GV, Traffic_Gen, Vehicle, Moving_Process,
 from gym_vuledge.envs.reverse_env import ReverseEnv
 from gym_vuledge.envs.reversenet import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
 
+from gym_vuledge.envs.reverse2d_env import Reverse2dEnv
+from gym_vuledge.envs.reversenet2d import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
+
+from gym_vuledge.envs.reverse3d_env import Reverse3dEnv
+from gym_vuledge.envs.reversenet3d import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
+
+from gym_vuledge.envs.reverse4d_env import Reverse4dEnv
+from gym_vuledge.envs.reversenet4d import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
+
 from gym_vuledge.envs.eval_env import EvalEnv
 from gym_vuledge.envs.evalnet import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
 
