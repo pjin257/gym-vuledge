@@ -730,10 +730,9 @@ class ROADNET(object):
         line_2nd, = plt.plot([0, 0, 0], label='2nd', c=rc[1], linewidth = 6)
         line_3rd, = plt.plot([0, 0, 0], label='3rd', c=rc[2], linewidth = 6)
         line_4th, = plt.plot([0, 0, 0], label='4th', c=rc[3], linewidth = 6)
-        line_5th, = plt.plot([0, 0, 0], label='5th', c=rc[4], linewidth = 6)
 
 
-        plt.legend([line_label, line_1st, line_2nd, line_3rd, line_4th, line_5th], ['Top-5 edges', '1st', '2nd', '3rd', '4th', '5th'], prop={'size': 20})
+        plt.legend([line_label, line_1st, line_2nd, line_3rd, line_4th], ['Top-5 edges', '1st', '2nd', '3rd', '4th'], prop={'size': 20})
 
         plt.savefig(dir + 'Attacked_edges_map.png')
         plt.close('all')
