@@ -34,6 +34,21 @@ register(
 )
 
 register(
+    id='eval2d-v1',
+    entry_point='gym_vuledge.envs:Eval2dEnv',
+)
+
+register(
+    id='eval3d-v1',
+    entry_point='gym_vuledge.envs:Eval3dEnv',
+)
+
+register(
+    id='eval4d-v1',
+    entry_point='gym_vuledge.envs:Eval4dEnv',
+)
+
+register(
     id='reval-v1',
     entry_point='gym_vuledge.envs:REvalEnv',
 )
