@@ -67,3 +67,18 @@ register(
     id='reval-v1',
     entry_point='gym_vuledge.envs:REvalEnv',
 )
+
+register(
+    id='reval2d-v1',
+    entry_point='gym_vuledge.envs:REval2dEnv',
+)
+
+register(
+    id='reval3d-v1',
+    entry_point='gym_vuledge.envs:REval3dEnv',
+)
+
+register(
+    id='reval4d-v1',
+    entry_point='gym_vuledge.envs:REval4dEnv',
+)

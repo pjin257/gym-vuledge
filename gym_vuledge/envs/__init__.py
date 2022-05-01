@@ -39,4 +39,12 @@ from gym_vuledge.envs.evalnet4d import GV, Traffic_Gen, Vehicle, Moving_Process,
 from gym_vuledge.envs.reval_env import REvalEnv
 from gym_vuledge.envs.revalnet import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
 
+from gym_vuledge.envs.reval2d_env import REval2dEnv
+from gym_vuledge.envs.revalnet2d import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
+
+from gym_vuledge.envs.reval3d_env import REval3dEnv
+from gym_vuledge.envs.revalnet3d import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
+
+from gym_vuledge.envs.reval4d_env import REval4dEnv
+from gym_vuledge.envs.revalnet4d import GV, Traffic_Gen, Vehicle, Moving_Process, Reroute_Process, Edge_Attack, ROADNET
 
