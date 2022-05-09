@@ -64,6 +64,11 @@ register(
 )
 
 register(
+    id='evalres-v1',
+    entry_point='gym_vuledge.envs:EvalResEnv',
+)
+
+register(
     id='reval-v1',
     entry_point='gym_vuledge.envs:REvalEnv',
 )
@@ -81,4 +86,9 @@ register(
 register(
     id='reval4d-v1',
     entry_point='gym_vuledge.envs:REval4dEnv',
+)
+
+register(
+    id='revalres-v1',
+    entry_point='gym_vuledge.envs:REvalResEnv',
 )
